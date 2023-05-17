@@ -58,7 +58,7 @@ class Report:
             # Here we've found the message - it's up to you to decide what to do next!
             self.state = State.MESSAGE_IDENTIFIED
             #return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
-              #      "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
+            #      "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
         
         if self.state == State.AWAITING_COMPLAINT:
             if message.content == '1' or message.content == '2' or message.content == '3' or message.content == '5' or message.content == '6' or message.content == '7' or message.content == '8':
@@ -73,6 +73,7 @@ class Report:
         if self.state == State.CONFIRMING_CSAM:
             res = message.content.strip().lower()
             if message.content == 'y' or message.content == 'n' or message.content == 'yes' or message.content == 'no':
+                self.state = State.REPORT_COMPLETE # move this later once you implement the options below
                 return ["Thank you for your report. We appreciate your feedback. How would you like to proceed?\n`1` Block user\n`2` Unfollow user\n`3`Learn more about our community guidelines"]
 
         if self.state == State.MESSAGE_IDENTIFIED:
