@@ -15,10 +15,12 @@ class Report:
     CANCEL_KEYWORD = "cancel"
     HELP_KEYWORD = "help"
 
-    def __init__(self, client):
+    def __init__(self, client, reports_list):
         self.state = State.REPORT_START
         self.client = client
         self.message = None
+        self.reports = reports_list
+        self.reported_message_link = None
         
     async def handle_message(self, message):
         '''
@@ -39,7 +41,6 @@ class Report:
             return [reply]
         
         if self.state == State.AWAITING_MESSAGE:
-            
             # Parse out the three ID strings from the message link
             m = re.search('/(\d+)/(\d+)/(\d+)', message.content)
             if not m:
@@ -52,6 +53,7 @@ class Report:
                 return ["It seems this channel was deleted or never existed. Please try again or say `cancel` to cancel."]
             try:
                 message = await channel.fetch_message(int(m.group(3)))
+                self.reported_message_link = m
             except discord.errors.NotFound:
                 return ["It seems this message was deleted or never existed. Please try again or say `cancel` to cancel."]
 
@@ -61,18 +63,19 @@ class Report:
             #      "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
         
         if self.state == State.AWAITING_COMPLAINT:
-            if message.content == '1' or message.content == '2' or message.content == '3' or message.content == '5' or message.content == '6' or message.content == '7' or message.content == '8':
+            m = message.content
+            if m == '1' or m == '2' or m == '3' or m == '5' or m == '6' or m == '7' or m == '8':
                 self.state = State.REPORT_COMPLETE
                 return ["Thank you for your report. We appreciate your feedback."]
-            elif message.content == '4':
+            elif m == '4':
                 self.state = State.CONFIRMING_CSAM
                 return ["Does this image contain a child? Y/N"]
             else:
                 return ["Sorry, I don't quite understand your reply. Please enter a number 1-8 corresponding to your reason for reporting: \n`1` for Hate Speech\n`2` for Spam\n`3` for Scam or Fraud\n`4` for Nudity or Sexual Activity\n`5` for Bullying or Harassment\n`6` for Illegal Activity\n`7` for Violence\n or, `8` I just don't like it."]
 
         if self.state == State.CONFIRMING_CSAM:
-            res = message.content.strip().lower()
-            if message.content == 'y' or message.content == 'n' or message.content == 'yes' or message.content == 'no':
+            m = message.content.strip().lower()
+            if m == 'y' or m == 'n' or m == 'yes' or m == 'no':
                 self.state = State.REPORT_COMPLETE # move this later once you implement the options below
                 return ["Thank you for your report. We appreciate your feedback. How would you like to proceed?\n`1` Block user\n`2` Unfollow user\n`3`Learn more about our community guidelines"]
 
@@ -88,6 +91,9 @@ class Report:
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
+    
+    def get_link(self):
+        return self.reported_message_link
     
 
 

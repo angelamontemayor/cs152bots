@@ -7,6 +7,7 @@ import logging
 import re
 import requests
 from report import Report
+from review import Review
 import pdb
 
 # Set up logging to the console
@@ -34,6 +35,10 @@ class ModBot(discord.Client):
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
+        self.reports_list = {} # Map from Report Number to (userID, timeStamp, reportedMessadeLink)
+        self.report_num = 0 # Counter for report number
+        self.reviews = {} # Map from mod IDs to the state of their reviews
+        self.users_with_strike = set() # Contains user IDs who have already received warnings
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -99,49 +104,68 @@ class ModBot(discord.Client):
             self.reports.pop(author_id)
 
     async def handle_channel_message(self, message):
-        # Only handle messages sent in the "group-#" channel
-        if not message.channel.name == f'group-{self.group_num}':
-            return
-
-        # Forward the message to the mod channel
         mod_channel = self.mod_channels[message.guild.id]
-        await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        scores = self.eval_text(message.content)
-        await mod_channel.send(self.code_format(scores))
+        # handle messages sent in the "group-#" channel
+        if message.channel.name == f'group-{self.group_num}':
+            # Forward the message to the mod channel
+            await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
+            scores = self.eval_text(message.content)
+            await mod_channel.send(self.code_format(scores))
 
-        ## NEW
-        if message.content == Report.HELP_KEYWORD:
-            reply =  "Use the `report` command to begin the reporting process.\n"
-            reply += "Use the `cancel` command to cancel the report process.\n"
-            await message.channel.send(reply)
+            ## NEW
+            if message.content == Report.HELP_KEYWORD:
+                reply =  "Use the `report` command to begin the reporting process.\n"
+                reply += "Use the `cancel` command to cancel the report process.\n"
+                await message.channel.send(reply)
+                return
+
+            author_id = message.author.id
+            responses = []
+
+            # Only respond to messages if they're part of a reporting flow
+            if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
+                return
+
+            # If we don't currently have an active report for this user, add one
+            if author_id not in self.reports:
+                self.reports[author_id] = Report(self)
+
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.reports[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map and add to reviews map
+            if self.reports[author_id].report_complete():
+                self.report_num += 1
+                self.reviews[self.report_num] = (author_id, message.created_at, self.reports[author_id].get_link())
+                self.reports.pop(author_id)
+        
+        # handle messages sent in the mod channel
+        elif message.channel.name == f'group-{self.group_num}-mod':
+            if author_id not in self.reviews and not message.content.startswith(Review.START_KEYWORD):
+                return
+            
+            if author_id not in self.reviews:
+                self.reports[author_id] = Review(self, self.reports_list)
+            
+            responses = await self.reports[author_id].handle_message(message)
+            for r in responses:
+                await mod_channel.channel.send(r)
+
+            if self.reviews[author_id].case_closed():
+                self.reviews.pop(author_id)
+            
+        else:
             return
-
-        author_id = message.author.id
-        responses = []
-
-        # Only respond to messages if they're part of a reporting flow
-        if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
-            return
-
-        # If we don't currently have an active report for this user, add one
-        if author_id not in self.reports:
-            self.reports[author_id] = Report(self)
-
-        # Let the report class handle this message; forward all the messages it returns to uss
-        responses = await self.reports[author_id].handle_message(message)
-        for r in responses:
-            await message.channel.send(r)
-
-        # If the report is complete or cancelled, remove it from our map
-        if self.reports[author_id].report_complete():
-            self.reports.pop(author_id)
-
+        
     
     def eval_text(self, message):
         ''''
         TODO: Once you know how you want to evaluate messages in your channel, 
         insert your code here! This will primarily be used in Milestone 3. 
         '''
+        
         return message
 
     
@@ -151,7 +175,7 @@ class ModBot(discord.Client):
         evaluated, insert your code here for formatting the string to be 
         shown in the mod channel. 
         '''
-        return "Evaluated: '" + text+ "'"
+        return ""
 
 
 client = ModBot()

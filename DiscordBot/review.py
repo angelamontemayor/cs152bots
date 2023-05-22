@@ -1,0 +1,81 @@
+from enum import Enum, auto
+import discord
+import re
+
+class State(Enum):
+    REVIEW_START = auto()
+    AWAITING_REPORT_NUM = auto()
+    MESSAGE_IDENTIFIED = auto()
+    REVIEW_COMPLETE = auto()
+    AWAITING_COMPLAINT = auto()
+    CONFIRMING_HASH = auto()
+    CONFIRMING_CSAM = auto()
+    FURTHER_REVIEW = auto()
+
+class Review:
+    START_KEYWORD = "review"
+    LIST_KEYWORD = 'list'
+    CANCEL_KEYWORD = "cancel"
+    HELP_KEYWORD = "help"
+
+    def __init__(self, client, reports):
+        self.state = State.REVIEW_START
+        self.client = client
+        self.curr_report_num = None
+        self.message = None
+        self.reports = reports
+        
+    async def handle_message(self, message):
+        if message.content == self.HELP_KEYWORD:
+                reply =  "Use the `review` command to begin the reviewing process.\n"
+                reply += "Use the `cancel` command to cancel the reviewing process.\n"
+                reply += "Use the `list` command to view all unreviewed reports.\n"
+        
+        if message.content == self.LIST_KEYWORD:
+            reply = "Unreviewed reports:\n"
+            for key in self.reports.keys():
+                userID, time_stamp, reported_link = self.reports[key] 
+                reply += 'Report #' + key + '  UserID: ' + userID + '  Time Create: ' + time_stamp + '  Reported_link ' + reported_link + '\n'
+            return [reply]
+        
+        if self.state == State.REVIEW_START:
+            reply = "Please enter a report number:"
+            self.state = State.AWAITING_REPORT_NUM
+            return [reply]
+        
+        if self.state == State.AWAITING_REPORT_NUM:
+            m = message.content
+            if m not in self.reports:
+                return ["Sorry, that is not a valid report case number. Use the `list` command to view all unreviewed reports."]
+            else:
+                # print report details
+                self.state = State.CONFIRMING_HASH
+                self.curr_report_num = int(m)
+                return ["Please hash check the reported image with the NCMEC database. Is the reported image already in the database? Y/N"]
+        
+        if self.state == State.CONFIRMING_HASH:
+            m = message.content.strip().lower()
+            if m == 'y' or m == 'yes':
+                self.state = State.REVIEW_COMPLETE 
+                return ["The image has been removed from the platform and sent to NCMEC in accordance to our guidelines."]
+            elif m == 'n' or m =='no':
+                self.state = State.CONFIRMING_CSAM
+                reply = "Open " + reported_link + " to view the reported image. Does the image contain child sexual abuse material? Y/N"
+                return [reply]
+            else:
+                return ["Sorry, I don't quite understand your reply. Please enter `Y` if the reported image is already in the NCMEC database, and `N` otherwise."]
+        
+        if self.state == State.CSAM:
+            if m == 'y' or m == 'yes':
+                self.state = State.REVIEW_COMPLETE 
+                return ["The image has been removed from the platform and sent to NCMEC in accordance to our guidelines."]
+            elif m == 'n' or m =='no':
+                self.state = State.FURTHER_REVIEW
+                return ["The reported image does not contain CSAM. The material will require further review."]
+            else:
+                return ["Sorry, I don't quite understand your reply. Please enter `Y` if the reported image contains child sexual abuse material, and `N` otherwise."]
+            
+        return []
+
+    def case_closed(self):
+        return self.state == State.REVIEW_COMPLETE or self.state == State.FURTHER_REVIEW
