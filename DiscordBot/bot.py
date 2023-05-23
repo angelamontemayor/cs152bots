@@ -35,7 +35,7 @@ class ModBot(discord.Client):
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
-        self.reports_list = {} # Map from Report Number to (userID, timeStamp, reportedMessadeLink)
+        self.reports_list = {} # Map from Report Number to (userID, timeStamp, reportedMessadeLink, containsChild)
         self.report_num = 0 # Counter for report number
         self.reviews = {} # Map from mod IDs to the state of their reviews
         self.users_with_strike = set() # Contains user IDs who have already received warnings
@@ -105,21 +105,21 @@ class ModBot(discord.Client):
 
     async def handle_channel_message(self, message):
         mod_channel = self.mod_channels[message.guild.id]
+        author_id = message.author.id
         # handle messages sent in the "group-#" channel
         if message.channel.name == f'group-{self.group_num}':
             # Forward the message to the mod channel
-            await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-            scores = self.eval_text(message.content)
-            await mod_channel.send(self.code_format(scores))
 
-            ## NEW
+            # await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
+            # scores = self.eval_text(message.content)
+            # await mod_channel.send(self.code_format(scores))
+
             if message.content == Report.HELP_KEYWORD:
                 reply =  "Use the `report` command to begin the reporting process.\n"
                 reply += "Use the `cancel` command to cancel the report process.\n"
                 await message.channel.send(reply)
                 return
-
-            author_id = message.author.id
+            
             responses = []
 
             # Only respond to messages if they're part of a reporting flow
@@ -135,26 +135,76 @@ class ModBot(discord.Client):
             for r in responses:
                 await message.channel.send(r)
 
-            # If the report is complete or cancelled, remove it from our map and add to reviews map
-            if self.reports[author_id].report_complete():
-                self.report_num += 1
-                self.reviews[self.report_num] = (author_id, message.created_at, self.reports[author_id].get_link())
+            # If the report is complete or cancelled, remove it from reports map and add to reviews map
+            if self.reports[author_id].report_canceled() or self.reports[author_id].report_complete():
+                if self.reports[author_id].report_complete():
+                    self.report_num += 1
+                    time_stamp = str(self.reports[author_id].get_time())
+                    reported_link = str(self.reports[author_id].get_link())
+                    containsChild = self.reports[author_id].image_contains_child()
+                    self.reports_list[self.report_num] = (author_id, time_stamp, reported_link, containsChild)
+                    reply = 'New report has been filed:\n'
+                    reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(author_id) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
+                    if containsChild:
+                        reply += 'Image believed to contain a child.'
+                    else:
+                        reply += 'Image is not believed to contain a child.'
+                    await mod_channel.send(reply)
                 self.reports.pop(author_id)
+                return
         
         # handle messages sent in the mod channel
         elif message.channel.name == f'group-{self.group_num}-mod':
+            if message.content == Review.HELP_KEYWORD:
+                reply =  "Use the `review` command to begin the reviewing process.\n"
+                reply += "Use the `cancel` command to cancel the reviewing process.\n"
+                reply += "Use the `list` command to view all unreviewed reports.\n"
+                await message.channel.send(reply)
+                return
+        
+            if message.content == Review.LIST_KEYWORD:
+                reply = "Unreviewed reports:\n\n"
+                for key in self.reports_list.keys():
+                    userID, time_stamp, reported_link, containsChild = self.reports_list[key] 
+                    reply += 'Case #' + str(key) + '\nReported by UserID: ' + str(userID) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
+                    if containsChild:
+                        reply += 'Image believed to contain a child.'
+                    else:
+                        reply += 'Image is not believed to contain a child.'
+                await message.channel.send(reply)
+                return
+            
             if author_id not in self.reviews and not message.content.startswith(Review.START_KEYWORD):
                 return
             
             if author_id not in self.reviews:
-                self.reports[author_id] = Review(self, self.reports_list)
+                self.reviews[author_id] = Review(self, self.reports_list)
             
-            responses = await self.reports[author_id].handle_message(message)
+            responses = await self.reviews[author_id].handle_message(message)
             for r in responses:
-                await mod_channel.channel.send(r)
+                await mod_channel.send(r)
 
             if self.reviews[author_id].case_closed():
+                # Implement consequences on perpetratring user if guilty
+                if self.reviews[author_id].is_violation():
+                    link = self.reviews[author_id].get_link()
+                    m = re.search('/(\d+)/(\d+)/(\d+)', link)
+                   
+                    channel = message.guild.get_channel(int(m.group(2)))
+                    m = await channel.fetch_message(int(m.group(3)))
+                    abuserID = m.author
+                    if abuserID in self.users_with_strike:
+                        await abuserID.send("Your account has been banned due to activity that violated our guidelines. If you would like to appeal this decision, email hr@group25.com.")
+                        reply = "The reported user (" + str(abuserID) + ") has violated community guidelines in the past. System has removed the account from the platform according to our strike policy."
+                        await mod_channel.send(reply)
+                    else:
+                        self.users_with_strike.add(abuserID)
+                        await abuserID.send("You have received a warning for a post that violated our community guidelines. If you violate the guidelines again, your account will be permanently banned.")
+                        reply = "The reported user (" + str(abuserID) + ") has not violated community guidelines in the past. System has added a strike to the user's account."
+                        await mod_channel.send(reply)
+                self.reports_list.pop(self.reviews[author_id].get_report_num())
                 self.reviews.pop(author_id)
+                
             
         else:
             return

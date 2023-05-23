@@ -9,18 +9,20 @@ class State(Enum):
     REPORT_COMPLETE = auto()
     AWAITING_COMPLAINT = auto()
     CONFIRMING_CSAM = auto()
+    REPORT_CANCELED = auto()
 
 class Report:
     START_KEYWORD = "report"
     CANCEL_KEYWORD = "cancel"
     HELP_KEYWORD = "help"
 
-    def __init__(self, client, reports_list):
+    def __init__(self, client):
         self.state = State.REPORT_START
         self.client = client
         self.message = None
-        self.reports = reports_list
         self.reported_message_link = None
+        self.reported_time = None
+        self.contains_child = False
         
     async def handle_message(self, message):
         '''
@@ -29,7 +31,7 @@ class Report:
         get you started and give you a model for working with Discord. 
         '''
         if message.content == self.CANCEL_KEYWORD:
-            self.state = State.REPORT_COMPLETE
+            self.state = State.REPORT_CANCELED
             return ["Report cancelled."]
         
         if self.state == State.REPORT_START:
@@ -38,10 +40,12 @@ class Report:
             reply += "Please copy paste the link to the message you want to report.\n"
             reply += "You can obtain this link by right-clicking the message and clicking `Copy Message Link`."
             self.state = State.AWAITING_MESSAGE
+            self.reported_time = message.created_at
             return [reply]
         
         if self.state == State.AWAITING_MESSAGE:
             # Parse out the three ID strings from the message link
+            raw = message.content
             m = re.search('/(\d+)/(\d+)/(\d+)', message.content)
             if not m:
                 return ["I'm sorry, I couldn't read that link. Please try again or say `cancel` to cancel."]
@@ -53,7 +57,7 @@ class Report:
                 return ["It seems this channel was deleted or never existed. Please try again or say `cancel` to cancel."]
             try:
                 message = await channel.fetch_message(int(m.group(3)))
-                self.reported_message_link = m
+                self.reported_message_link = raw
             except discord.errors.NotFound:
                 return ["It seems this message was deleted or never existed. Please try again or say `cancel` to cancel."]
 
@@ -76,6 +80,8 @@ class Report:
         if self.state == State.CONFIRMING_CSAM:
             m = message.content.strip().lower()
             if m == 'y' or m == 'n' or m == 'yes' or m == 'no':
+                if m == 'y' or m == 'n':
+                    self.contains_child = True
                 self.state = State.REPORT_COMPLETE # move this later once you implement the options below
                 return ["Thank you for your report. We appreciate your feedback. How would you like to proceed?\n`1` Block user\n`2` Unfollow user\n`3`Learn more about our community guidelines"]
 
@@ -92,8 +98,21 @@ class Report:
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
     
+    def report_canceled(self):
+        return self.state == State.REPORT_CANCELED
+    
     def get_link(self):
         return self.reported_message_link
+
+    def get_time(self):
+        return self.reported_time
+    
+    def image_contains_child(self):
+        return self.contains_child
+
+
+    
+
     
 
 
