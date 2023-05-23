@@ -9,6 +9,7 @@ class State(Enum):
     REPORT_COMPLETE = auto()
     AWAITING_COMPLAINT = auto()
     CONFIRMING_CSAM = auto()
+    AWAITING_LAST_MESSAGE= auto()
     REPORT_CANCELED = auto()
 
 class Report:
@@ -23,6 +24,7 @@ class Report:
         self.reported_message_link = None
         self.reported_time = None
         self.contains_child = False
+        self.abuserID = None
         
     async def handle_message(self, message):
         '''
@@ -57,6 +59,7 @@ class Report:
                 return ["It seems this channel was deleted or never existed. Please try again or say `cancel` to cancel."]
             try:
                 message = await channel.fetch_message(int(m.group(3)))
+                self.abuserID = message.author
                 self.reported_message_link = raw
             except discord.errors.NotFound:
                 return ["It seems this message was deleted or never existed. Please try again or say `cancel` to cancel."]
@@ -65,6 +68,12 @@ class Report:
             self.state = State.MESSAGE_IDENTIFIED
             #return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
             #      "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
+
+        if self.state == State.MESSAGE_IDENTIFIED:
+            self.state = State.AWAITING_COMPLAINT
+            reply =  "Thank you for sharing the message. "
+            reply += "Why are you reporting this image? Please reply with:\n`1` for Hate Speech\n`2` for Spam\n`3` for Scam or Fraud\n`4` for Nudity or Sexual Activity\n`5` for Bullying or Harassment\n`6` for Illegal Activity\n`7` for Violence\n or, `8` I just don't like it."
+            return [reply]
         
         if self.state == State.AWAITING_COMPLAINT:
             m = message.content
@@ -82,15 +91,19 @@ class Report:
             if m == 'y' or m == 'n' or m == 'yes' or m == 'no':
                 if m == 'y' or m == 'n':
                     self.contains_child = True
-                self.state = State.REPORT_COMPLETE # move this later once you implement the options below
-                return ["Thank you for your report. We appreciate your feedback. How would you like to proceed?\n`1` Block user\n`2` Unfollow user\n`3`Learn more about our community guidelines"]
+                self.state = State.AWAITING_LAST_MESSAGE
+                return ["Thank you for your report. How would you like to proceed?\n`1` Block user\n`2` Learn more about our community guidelines\n`3` Done"]
 
-        if self.state == State.MESSAGE_IDENTIFIED:
-            #return ["<insert rest of reporting flow here>"]
-            # insert rest of reporting flow here
-            self.state = State.AWAITING_COMPLAINT
-            reply =  "Thank you for sharing the message. "
-            reply += "Why are you reporting this image? Please reply with:\n`1` for Hate Speech\n`2` for Spam\n`3` for Scam or Fraud\n`4` for Nudity or Sexual Activity\n`5` for Bullying or Harassment\n`6` for Illegal Activity\n`7` for Violence\n or, `8` I just don't like it."
+        if self.state == State.AWAITING_LAST_MESSAGE:
+            m = message.content
+            self.state = State.REPORT_COMPLETE
+            reply = ""
+            if m == '1':
+                reply += str(self.abuserID) + " has been succesfully blocked."
+            elif m == '2':
+                reply += 'Sure! You can read up on our community guidelines here: https://docs.google.com/document/d/1Zv5NfIxcxeTJVEKC65LWJACgUGRRIYd58iwygyfLcLU/edit?usp=sharing'
+            else:
+                reply += 'We appreciate your feedback.'
             return [reply]
 
         return []
@@ -109,7 +122,9 @@ class Report:
     
     def image_contains_child(self):
         return self.contains_child
-
+    
+    def get_abuser_id(self):
+        return self.abuserID
 
     
 

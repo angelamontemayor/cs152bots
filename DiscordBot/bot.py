@@ -39,6 +39,7 @@ class ModBot(discord.Client):
         self.report_num = 0 # Counter for report number
         self.reviews = {} # Map from mod IDs to the state of their reviews
         self.users_with_strike = set() # Contains user IDs who have already received warnings
+        self.mod_channel = None # Set to group 25 Mod Channel
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -58,6 +59,7 @@ class ModBot(discord.Client):
             for channel in guild.text_channels:
                 if channel.name == f'group-{self.group_num}-mod':
                     self.mod_channels[guild.id] = channel
+                    self.mod_channel = channel
         
 
     async def on_message(self, message):
@@ -74,6 +76,7 @@ class ModBot(discord.Client):
             await self.handle_channel_message(message)
         else:
             await self.handle_dm(message)
+
 
     async def handle_dm(self, message):
         # Handle a help message
@@ -99,21 +102,30 @@ class ModBot(discord.Client):
         for r in responses:
             await message.channel.send(r)
 
-        # If the report is complete or cancelled, remove it from our map
-        if self.reports[author_id].report_complete():
+        # If the report is complete or cancelled
+        if self.reports[author_id].report_canceled() or self.reports[author_id].report_complete():
+            # If report completed, update reports_list map and send report to mod channel
+            if self.reports[author_id].report_complete():
+                self.report_num += 1
+                time_stamp = str(self.reports[author_id].get_time())
+                reported_link = str(self.reports[author_id].get_link())
+                containsChild = self.reports[author_id].image_contains_child()
+                self.reports_list[self.report_num] = (author_id, time_stamp, reported_link, containsChild)
+                reply = 'New report has been filed:\n'
+                reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(author_id) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
+                if containsChild:
+                    reply += 'Image believed to contain a child.\n'
+                else:
+                    reply += 'Image is not believed to contain a child.\n'
+                self.mod_channel.send(reply)
             self.reports.pop(author_id)
+            return
 
     async def handle_channel_message(self, message):
         mod_channel = self.mod_channels[message.guild.id]
         author_id = message.author.id
         # handle messages sent in the "group-#" channel
         if message.channel.name == f'group-{self.group_num}':
-            # Forward the message to the mod channel
-
-            # await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-            # scores = self.eval_text(message.content)
-            # await mod_channel.send(self.code_format(scores))
-
             if message.content == Report.HELP_KEYWORD:
                 reply =  "Use the `report` command to begin the reporting process.\n"
                 reply += "Use the `cancel` command to cancel the report process.\n"
@@ -130,12 +142,12 @@ class ModBot(discord.Client):
             if author_id not in self.reports:
                 self.reports[author_id] = Report(self)
 
-            # Let the report class handle this message; forward all the messages it returns to uss
+            # Let the report class handle the rest of the flow
             responses = await self.reports[author_id].handle_message(message)
             for r in responses:
                 await message.channel.send(r)
 
-            # If the report is complete or cancelled, remove it from reports map and add to reviews map
+            # If report completed, update reports_list map and send report to mod channel
             if self.reports[author_id].report_canceled() or self.reports[author_id].report_complete():
                 if self.reports[author_id].report_complete():
                     self.report_num += 1
@@ -146,9 +158,9 @@ class ModBot(discord.Client):
                     reply = 'New report has been filed:\n'
                     reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(author_id) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
                     if containsChild:
-                        reply += 'Image believed to contain a child.'
+                        reply += 'Image believed to contain a child.\n'
                     else:
-                        reply += 'Image is not believed to contain a child.'
+                        reply += 'Image is not believed to contain a child.\n'
                     await mod_channel.send(reply)
                 self.reports.pop(author_id)
                 return
@@ -162,6 +174,7 @@ class ModBot(discord.Client):
                 await message.channel.send(reply)
                 return
         
+            # list all unreviewed reports
             if message.content == Review.LIST_KEYWORD:
                 reply = "Unreviewed reports:\n\n"
                 for key in self.reports_list.keys():
@@ -174,25 +187,34 @@ class ModBot(discord.Client):
                 await message.channel.send(reply)
                 return
             
+            # Only respond to messages if they're part of a review flow
             if author_id not in self.reviews and not message.content.startswith(Review.START_KEYWORD):
                 return
-            
+           
+           # If we don't currently have an active review for this mod, add one
             if author_id not in self.reviews:
                 self.reviews[author_id] = Review(self, self.reports_list)
             
+            # Let the review class handle the rest of the flow
             responses = await self.reviews[author_id].handle_message(message)
             for r in responses:
                 await mod_channel.send(r)
 
+            # if we are at the end of the review flow
             if self.reviews[author_id].case_closed():
-                # Implement consequences on perpetratring user if guilty
+                # Implement consequences on abuser has indeed violated guidelines
                 if self.reviews[author_id].is_violation():
+                    # find the ID of the abuser
                     link = self.reviews[author_id].get_link()
                     m = re.search('/(\d+)/(\d+)/(\d+)', link)
-                   
                     channel = message.guild.get_channel(int(m.group(2)))
                     m = await channel.fetch_message(int(m.group(3)))
                     abuserID = m.author
+                    
+                    # delete the reported message
+                    await m.delete()
+                    
+                    # check past violation history
                     if abuserID in self.users_with_strike:
                         await abuserID.send("Your account has been banned due to activity that violated our guidelines. If you would like to appeal this decision, email hr@group25.com.")
                         reply = "The reported user (" + str(abuserID) + ") has violated community guidelines in the past. System has removed the account from the platform according to our strike policy."
@@ -202,10 +224,9 @@ class ModBot(discord.Client):
                         await abuserID.send("You have received a warning for a post that violated our community guidelines. If you violate the guidelines again, your account will be permanently banned.")
                         reply = "The reported user (" + str(abuserID) + ") has not violated community guidelines in the past. System has added a strike to the user's account."
                         await mod_channel.send(reply)
-                self.reports_list.pop(self.reviews[author_id].get_report_num())
+                if not self.reviews[author_id].is_canceled_review():
+                    self.reports_list.pop(self.reviews[author_id].get_report_num())
                 self.reviews.pop(author_id)
-                
-            
         else:
             return
         
@@ -218,7 +239,7 @@ class ModBot(discord.Client):
         
         return message
 
-    
+     
     def code_format(self, text):
         ''''
         TODO: Once you know how you want to show that a message has been 

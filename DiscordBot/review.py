@@ -4,10 +4,9 @@ import re
 
 class State(Enum):
     REVIEW_START = auto()
+    REVIEW_CANCLED = auto()
     AWAITING_REPORT_NUM = auto()
-    MESSAGE_IDENTIFIED = auto()
     REVIEW_COMPLETE = auto()
-    AWAITING_COMPLAINT = auto()
     CONFIRMING_HASH = auto()
     CONFIRMING_CSAM = auto()
     FURTHER_REVIEW = auto()
@@ -26,6 +25,10 @@ class Review:
         self.link = None 
         
     async def handle_message(self, message):
+
+        if message.content == self.CANCEL_KEYWORD:
+            self.state = State.REVIEW_CANCLED
+            return ["Review cancelled."]
         
         if self.state == State.REVIEW_START:
             reply = "Please enter a report number:"
@@ -69,7 +72,10 @@ class Review:
         return []
 
     def case_closed(self):
-        return self.state == State.REVIEW_COMPLETE or self.state == State.FURTHER_REVIEW
+        return self.state == State.REVIEW_COMPLETE or self.state == State.FURTHER_REVIEW or self.state == State.REVIEW_CANCLED
+    
+    def is_canceled_review(self):
+        return self.state == State.REVIEW_CANCLED
     
     def is_violation(self):
         return self.state == State.REVIEW_COMPLETE 
