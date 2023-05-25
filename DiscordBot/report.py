@@ -89,7 +89,7 @@ class Report:
         if self.state == State.CONFIRMING_CSAM:
             m = message.content.strip().lower()
             if m == 'y' or m == 'n' or m == 'yes' or m == 'no':
-                if m == 'y' or m == 'n':
+                if m == 'y' or m == 'Y':
                     self.contains_child = True
                 self.state = State.AWAITING_LAST_MESSAGE
                 return ["Thank you for your report. How would you like to proceed?\n`1` Block user\n`2` Learn more about our community guidelines\n`3` Done"]

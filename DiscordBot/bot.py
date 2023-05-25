@@ -61,6 +61,7 @@ class ModBot(discord.Client):
                     self.mod_channels[guild.id] = channel
                     self.mod_channel = channel
         
+        
 
     async def on_message(self, message):
         '''
@@ -117,7 +118,7 @@ class ModBot(discord.Client):
                     reply += 'Image believed to contain a child.\n'
                 else:
                     reply += 'Image is not believed to contain a child.\n'
-                self.mod_channel.send(reply)
+                await self.mod_channel.send(reply)
             self.reports.pop(author_id)
             return
 
@@ -181,9 +182,9 @@ class ModBot(discord.Client):
                     userID, time_stamp, reported_link, containsChild = self.reports_list[key] 
                     reply += 'Case #' + str(key) + '\nReported by UserID: ' + str(userID) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
                     if containsChild:
-                        reply += 'Image believed to contain a child.'
+                        reply += 'Image believed to contain a child.\n\n'
                     else:
-                        reply += 'Image is not believed to contain a child.'
+                        reply += 'Image is not believed to contain a child.\n\n'
                 await message.channel.send(reply)
                 return
             
