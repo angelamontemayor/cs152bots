@@ -9,6 +9,7 @@ import requests
 from report import Report
 from review import Review
 import pdb
+from classifier import *
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -40,6 +41,7 @@ class ModBot(discord.Client):
         self.reviews = {} # Map from mod IDs to the state of their reviews
         self.users_with_strike = set() # Contains user IDs who have already received warnings
         self.mod_channel = None # Set to group 25 Mod Channel
+ 
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -126,6 +128,26 @@ class ModBot(discord.Client):
         mod_channel = self.mod_channels[message.guild.id]
         author_id = message.author.id
         # handle messages sent in the "group-#" channel
+
+        # automatic CSAM filtering
+        has_attachment = bool(message.attachments)
+        if has_attachment:
+            image_url = message.attachments[0].url
+            label = classify(image_url)
+            if label == "kitten":
+                    author_id = "Automatic Filter"
+                    self.report_num += 1
+                    time_stamp = str(message.created_at)
+                    reported_link = str(message.jump_url)
+                    containsChild = True
+                    self.reports_list[self.report_num] = (author_id, time_stamp, reported_link, containsChild)
+                    reply = 'New report has been filed:\n'
+                    reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(author_id) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
+                    reply += 'Image believed to contain a child.\n'
+                    await mod_channel.send(reply)
+            return
+
+        
         if message.channel.name == f'group-{self.group_num}':
             if message.content == Report.HELP_KEYWORD:
                 reply =  "Use the `report` command to begin the reporting process.\n"
