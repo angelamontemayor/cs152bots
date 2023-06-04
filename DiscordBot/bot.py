@@ -115,7 +115,7 @@ class ModBot(discord.Client):
                 containsChild = self.reports[author_id].image_contains_child()
                 self.reports_list[self.report_num] = (author_id, time_stamp, reported_link, containsChild)
                 reply = 'New report has been filed:\n'
-                reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(author_id) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
+                reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(message.author) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
                 if containsChild:
                     reply += 'Image believed to contain a child.\n'
                 else:
@@ -179,7 +179,7 @@ class ModBot(discord.Client):
                     containsChild = self.reports[author_id].image_contains_child()
                     self.reports_list[self.report_num] = (author_id, time_stamp, reported_link, containsChild)
                     reply = 'New report has been filed:\n'
-                    reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(author_id) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
+                    reply += 'Case #' + str(self.report_num) + '\nReported by UserID: ' + str(message.author) + '\nTime Filed: ' + time_stamp + '\nReported Image Link: ' + reported_link + '\n'
                     if containsChild:
                         reply += 'Image believed to contain a child.\n'
                     else:

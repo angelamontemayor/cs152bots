@@ -36,7 +36,7 @@ def classify(url):
         prediction = prediction.argmax(dim=1)
         if prediction == 1:
             return "kitten"
-	elif prediction == 0:
-	    return "adult cat"
+        elif prediction == 0:
+            return "adult cat"
         else:
             return "not a cat"
