@@ -24,7 +24,7 @@ def classify(url):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = models.resnet50(pretrained=True)
     num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 2)
+    model.fc = nn.Linear(num_ftrs, 3)
     model = model.to(device)
     params = torch.load('tensor.pt', map_location=torch.device('cpu'))
     model.load_state_dict(params)
@@ -36,5 +36,7 @@ def classify(url):
         prediction = prediction.argmax(dim=1)
         if prediction == 1:
             return "kitten"
+	elif prediction == 0:
+	    return "adult cat"
         else:
-            return "adult cat"
+            return "not a cat"
