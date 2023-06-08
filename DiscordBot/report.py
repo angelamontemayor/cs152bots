@@ -63,11 +63,7 @@ class Report:
                 self.reported_message_link = raw
             except discord.errors.NotFound:
                 return ["It seems this message was deleted or never existed. Please try again or say `cancel` to cancel."]
-
-            # Here we've found the message - it's up to you to decide what to do next!
             self.state = State.MESSAGE_IDENTIFIED
-            #return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
-            #      "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
 
         if self.state == State.MESSAGE_IDENTIFIED:
             self.state = State.AWAITING_COMPLAINT
